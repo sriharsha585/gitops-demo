@@ -19,4 +19,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nandam585/nginx:18
+        image: nandam585/nginx:1
+
+        ports:
+        - containerPort: 80
