@@ -19,4 +19,4 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nandam585/nginx:v1
+        image: nandam585/nginx:18
