@@ -1,17 +1,10 @@
-# Jenkins + Argo CD GitOps Demo
+# GitHub Actions + Argo CD GitOps Deployment
 
 ## Project Overview
 
-This project demonstrates a complete GitOps-based CI/CD pipeline using:
+This project demonstrates a complete GitOps-based Continuous Integration and Continuous Deployment (CI/CD) pipeline using GitHub Actions, Docker, Argo CD, and Kubernetes.
 
-- Jenkins
-- Docker
-- Docker Hub
-- GitHub
-- Argo CD
-- Kubernetes (Minikube)
-
-The goal is to automate application deployment using GitOps principles, where Argo CD continuously synchronizes Kubernetes with the desired state stored in Git.
+The pipeline automatically builds a Docker image, pushes it to Docker Hub, updates a GitOps repository, and deploys the latest version to Kubernetes using Argo CD.
 
 ---
 
@@ -19,59 +12,58 @@ The goal is to automate application deployment using GitOps principles, where Ar
 
 ```text
 Developer
-    |
-    v
+    │
+    ▼
 GitHub (Application Repository)
-    |
-    v
-Jenkins Pipeline
-    |
-    +--> Build Docker Image
-    |
-    +--> Push Image to Docker Hub
-    |
-    +--> Update GitOps Repository
-    |
-    v
+    │
+    ▼
+GitHub Actions
+    │
+    ├── Build Docker Image
+    ├── Push Image to Docker Hub
+    └── Update GitOps Repository
+            │
+            ▼
 GitHub (GitOps Repository)
-    |
-    v
+            │
+            ▼
 Argo CD
-    |
-    v
-Kubernetes (Minikube)
+            │
+            ▼
+Kubernetes Cluster (Minikube)
 ```
 
 ---
 
 ## Technologies Used
 
-| Tool | Purpose |
-|--------|----------|
-| GitHub | Source Code Management |
-| Jenkins | Continuous Integration |
-| Docker | Containerization |
-| Docker Hub | Image Registry |
-| Argo CD | GitOps Deployment Tool |
-| Kubernetes | Container Orchestration |
-| Minikube | Local Kubernetes Cluster |
+* GitHub
+* GitHub Actions
+* Docker
+* Docker Hub
+* Kubernetes
+* Minikube
+* Argo CD
+* GitOps
 
 ---
 
-## Repository Structure
-
-### Application Repository
+## Application Repository Structure
 
 ```text
 sample-app/
 │
 ├── Dockerfile
-├── Jenkinsfile
 ├── index.html
-└── README.md
+├── README.md
+└── .github
+    └── workflows
+        └── deploy.yml
 ```
 
-### GitOps Repository
+---
+
+## GitOps Repository Structure
 
 ```text
 gitops-demo/
@@ -87,72 +79,98 @@ gitops-demo/
 
 ### Step 1: Developer Pushes Code
 
-Developer commits code changes to GitHub.
-
 ```bash
 git add .
-git commit -m "Code changes"
+git commit -m "New feature"
 git push origin main
 ```
 
 ---
 
-### Step 2: Jenkins Pipeline Starts
+### Step 2: GitHub Actions Triggered
 
-Jenkins automatically:
+Workflow is triggered automatically when code is pushed to the main branch.
 
-- Checks out source code
-- Builds Docker image
-- Tags image using build number
+```yaml
+on:
+  push:
+    branches:
+      - main
+```
+
+---
+
+### Step 3: Checkout Source Code
+
+```yaml
+- uses: actions/checkout@v4
+```
+
+Downloads repository contents into the GitHub Actions runner.
+
+---
+
+### Step 4: Docker Hub Authentication
+
+```yaml
+- uses: docker/login-action@v3
+```
+
+Authenticates with Docker Hub using GitHub Secrets.
+
+---
+
+### Step 5: Build Docker Image
+
+```bash
+docker build -t nandam585/nginx:${{ github.run_number }} .
+```
+
+Builds a new Docker image.
+
+---
+
+### Step 6: Push Docker Image
+
+```bash
+docker push nandam585/nginx:${{ github.run_number }}
+```
+
+Pushes the image to Docker Hub.
+
+---
+
+### Step 7: Update GitOps Repository
+
+The workflow:
+
+1. Clones the GitOps repository
+2. Updates deployment.yaml
+3. Replaces the image tag with the latest version
+4. Commits the change
+5. Pushes the change back to GitHub
 
 Example:
-
-```bash
-docker build -t nandam585/nginx:15 .
-```
-
----
-
-### Step 3: Push Image to Docker Hub
-
-Jenkins authenticates with Docker Hub and pushes the image.
-
-```bash
-docker push nandam585/nginx:15
-```
-
----
-
-### Step 4: Update GitOps Repository
-
-Jenkins updates deployment.yaml with the new image tag.
 
 Before:
 
 ```yaml
-image: nandam585/nginx:14
+image: nandam585/nginx:5
 ```
 
 After:
 
 ```yaml
-image: nandam585/nginx:15
-```
-
-Jenkins commits and pushes the change.
-
-```bash
-git commit -m "Updated image to 15"
-git push
+image: nandam585/nginx:6
 ```
 
 ---
 
-### Step 5: Argo CD Detects Change
+### Step 8: Argo CD Synchronization
 
-Argo CD continuously watches the GitOps repository.
+Argo CD continuously monitors the GitOps repository.
 
-When a new commit is detected:
+When it detects a change:
 
 ```text
 OutOfSync
@@ -162,248 +180,164 @@ Sync
 Healthy
 ```
 
+The new version is automatically deployed to Kubernetes.
+
 ---
 
-### Step 6: Kubernetes Deployment Updated
+## GitHub Secrets Used
 
-New pods are deployed automatically.
+| Secret          | Purpose                            |
+| --------------- | ---------------------------------- |
+| DOCKER_USERNAME | Docker Hub Username                |
+| DOCKER_PASSWORD | Docker Hub Password / Access Token |
+| PAT_TOKEN       | GitHub Personal Access Token       |
+
+---
+
+## Kubernetes Deployment Verification
+
+Check deployment:
+
+```bash
+kubectl get deployment
+```
+
+Check pods:
 
 ```bash
 kubectl get pods
 ```
 
----
+Check deployed image:
 
-## Jenkins Pipeline Stages
-
-### Debug
-
-```groovy
-pwd
-ls -la
+```bash
+kubectl get deployment nginx \
+-o=jsonpath='{.spec.template.spec.containers[0].image}'
 ```
 
-Verifies workspace contents.
-
 ---
 
-### Build
+## Argo CD Verification
 
-```groovy
-docker build -t $IMAGE:$BUILD_NUMBER .
+List applications:
+
+```bash
+argocd app list
 ```
 
-Builds Docker image.
+Application details:
 
----
-
-### Docker Login & Push
-
-```groovy
-docker login
-docker push
+```bash
+argocd app get nginx-app
 ```
 
-Pushes image to Docker Hub.
+Manual sync:
+
+```bash
+argocd app sync nginx-app
+```
 
 ---
 
-### Update GitOps Repo
-
-Updates Kubernetes manifests with latest image version.
-
----
-
-## Argo CD Concepts Learned
+## GitOps Concepts Learned
 
 ### GitOps
 
-Git acts as the single source of truth.
-
----
+Git is the single source of truth.
 
 ### Desired State
 
 Configuration stored in Git.
 
-Example:
-
-```yaml
-replicas: 2
-```
-
----
-
 ### Actual State
 
-Current state inside Kubernetes cluster.
-
----
-
-### OutOfSync
-
-Git and Kubernetes states do not match.
-
----
+Running configuration in Kubernetes.
 
 ### Sync
 
 Argo CD updates Kubernetes to match Git.
 
----
+### Auto Sync
 
-## Issues Faced and Resolutions
+Automatically applies changes from Git.
 
-### Issue 1
+### Self Heal
 
-#### Error
+Automatically corrects configuration drift.
 
-```text
-docker: not found
-```
+### Prune
 
-#### Root Cause
-
-Docker CLI missing inside Jenkins container.
-
-#### Resolution
-
-Installed Docker CLI.
+Deletes Kubernetes resources removed from Git.
 
 ---
 
-### Issue 2
+## Key Learning Outcomes
 
-#### Error
-
-```text
-permission denied while trying to connect to docker daemon
-```
-
-#### Root Cause
-
-Jenkins user lacked Docker socket permissions.
-
-#### Resolution
-
-Added Jenkins user to Docker socket group.
+* GitHub Actions Workflow Creation
+* GitHub Hosted Runners
+* GitHub Secrets Management
+* Docker Image Build & Push
+* GitOps Repository Management
+* Argo CD Continuous Deployment
+* Kubernetes Deployments
+* GitOps Best Practices
+* CI/CD Troubleshooting
 
 ---
 
-### Issue 3
+## Common Issues Faced
 
-#### Error
+### Docker Authentication Failure
 
-```text
-Dockerfile not found
-```
+Cause:
+Incorrect Docker Hub credentials.
 
-#### Root Cause
-
-Missing Dockerfile in repository.
-
-#### Resolution
-
-Created Dockerfile and pushed to GitHub.
+Resolution:
+Configured GitHub Secrets correctly.
 
 ---
 
-### Issue 4
+### GitHub PAT Authentication Failure
 
-#### Error
+Cause:
+Insufficient token permissions.
 
-```text
-COPY index.html failed
-```
-
-#### Root Cause
-
-File missing from build context.
-
-#### Resolution
-
-Added index.html to repository.
+Resolution:
+Created Personal Access Token with Contents Read & Write permissions.
 
 ---
 
-### Issue 5
+### Deployment Not Updating
 
-#### Error
+Cause:
+GitOps repository was not updated.
 
-```text
-docker push access denied
-```
-
-#### Root Cause
-
-Docker Hub authentication not configured.
-
-#### Resolution
-
-Configured Docker Hub credentials in Jenkins.
+Resolution:
+Verified image tag update and Git push operation.
 
 ---
 
-### Issue 6
+### Argo CD OutOfSync
 
-#### Error
+Cause:
+Git repository and Kubernetes state differed.
 
-```text
-Credential type mismatch
-```
-
-#### Root Cause
-
-Secret Text and Username/Password mismatch.
-
-#### Resolution
-
-Updated Jenkins credential configuration.
-
----
-
-### Issue 7
-
-#### Error
-
-```text
-git push failed
-```
-
-#### Root Cause
-
-GitHub PAT authentication issue.
-
-#### Resolution
-
-Configured GitHub credentials correctly.
-
----
-
-## Key Learnings
-
-- GitOps Fundamentals
-- Jenkins Pipeline Development
-- Docker Image Management
-- Docker Hub Integration
-- GitHub Authentication
-- Argo CD Deployment Workflow
-- Kubernetes Application Deployment
-- CI/CD Troubleshooting
-- Production Support Scenarios
+Resolution:
+Performed synchronization and enabled Auto Sync.
 
 ---
 
 ## Future Enhancements
 
-- Auto Sync
-- Self Heal
-- Prune
-- Helm Integration
-- Multi-Environment Deployments
-- RBAC
-- Monitoring with Prometheus & Grafana
-- High Availability Setup
+* Helm Integration
+* Kustomize Integration
+* Multi-Environment Deployment
+* Prometheus Monitoring
+* Grafana Dashboards
+* RBAC
+* SSO Integration
+* High Availability Argo CD
+* Disaster Recovery Strategy
 
 ---
 
@@ -413,5 +347,5 @@ Sai Sri Harsha Nandam
 
 DevOps Engineer
 
-Technologies:
-AWS | Jenkins | Docker | Kubernetes | Argo CD | GitHub Actions | Terraform | Ansible | Linux
+Skills:
+AWS | GitHub Actions | Jenkins | Docker | Kubernetes | Argo CD | Terraform | Ansible | Linux | GitOps
